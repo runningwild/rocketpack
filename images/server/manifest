@@ -1,0 +1,60 @@
+{
+    "acKind": "ImageManifest",
+    "acVersion": "0.5.1",
+    "name": "rocketpack.io/server",
+    "labels": [
+        {
+            "name": "version",
+            "value": "0.0.1"
+        },
+        {
+            "name": "arch",
+            "value": "amd64"
+        },
+        {
+            "name": "os",
+            "value": "linux"
+        }
+    ],
+    "dependencies": [
+        {
+            "imageName": "rocketpack.io/golibs",
+            "labels": [
+                {
+                    "name": "version",
+                    "value": "0.1.0"
+                }
+            ]
+        },
+        {
+            "imageName": "rocketpack.io/etc",
+            "labels": [
+                {
+                    "name": "version",
+                    "value": "0.1.0"
+                }
+            ]
+        }
+    ],
+    "app": {
+        "user": "root",
+        "group": "root",
+        "exec": [
+            "/bin/server",
+            "--db=/store/db"
+        ],
+        "mountPoints": [
+            {
+                "name": "store",
+                "path": "/store",
+                "readOnly": false
+            }
+        ]
+    },
+    "annotations": [
+        {
+            "name": "author",
+            "value": "Jonathan Wills"
+        }
+    ]
+}

@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	domain      = flag.String("domain", "rocketpack.io", "Domain to serve containers from.")
+	domain      = flag.String("domain", "", "Domain to serve containers from.")
 	dbPath      = flag.String("db", "db", "Database to use for persistent storage.")
 	port        = flag.Int("port", 443, "Port to serve https traffic on.")
 	tlsCertFile = flag.String("cert-file", "", "PEM encoded certificates.")
