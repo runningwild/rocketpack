@@ -43,6 +43,13 @@
             "/bin/server",
             "--db=/store/db"
         ],
+        "ports": [
+            {
+                "name": "https",
+                "port": 443,
+                "protocol": "tcp"
+            }
+        ],
         "mountPoints": [
             {
                 "name": "store",
