@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/appc/spec/schema/types"
 	"github.com/boltdb/bolt"
@@ -24,6 +25,20 @@ var (
 
 func main() {
 	flag.Parse()
+
+	go func() {
+		for {
+			time.Sleep(time.Second * 5)
+			resp, err := http.Get("http://www.google.com")
+			if err != nil {
+				log.Printf("failed to find google: %v", err)
+				continue
+			}
+			log.Printf("found google, got response")
+			data, _ := ioutil.ReadAll(resp.Body)
+			log.Printf("resp: %s\n", data)
+		}
+	}()
 
 	db, err := bolt.Open(*dbPath, 0664, nil)
 	if err != nil {
