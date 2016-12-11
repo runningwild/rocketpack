@@ -161,7 +161,7 @@ func main() {
 		fmt.Fprintf(w, "balls")
 	})
 
-	http.ListenAndServeTLS(fmt.Sprintf(":%d", *port), *tlsCertFile, *tlsKeyFile, r)
+	log.Fatalf("%v", http.ListenAndServeTLS(fmt.Sprintf(":%d", *port), *tlsCertFile, *tlsKeyFile, r))
 }
 
 func varsToKey(vars *aciVars) []byte {
