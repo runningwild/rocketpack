@@ -18,7 +18,7 @@ import (
 	"github.com/appc/spec/schema"
 )
 
-const testServer = "localhost:8080"
+const testServer = "http://localhost:8080"
 
 var (
 	server  = flag.String("server", "rocketpack.io", "server to push to.")
@@ -28,6 +28,7 @@ var (
 
 func main() {
 	flag.Parse()
+	log.SetFlags(log.Lshortfile | log.Ltime)
 	if *aciPath == "" {
 		log.Fatalf("Must specify an aci with --aci.")
 	}
@@ -43,15 +44,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Unable to load asc %q: %v", *ascPath, err)
 	}
+	labels["sig"] = string(asc)
 
-	resp, err := http.Get(fmt.Sprintf("http://%s/prepareupload", *server))
-	if err != nil {
-		log.Fatalf("Failed to upload to server: %v", err)
-	}
-	target, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalf("Got invalid response from server: %v", err)
-	}
 	signatureBuf := bytes.NewBuffer(nil)
 	{
 		enc := base64.NewEncoder(base64.URLEncoding, signatureBuf)
@@ -65,35 +59,34 @@ func main() {
 	var boundary string
 	{
 		mpw := multipart.NewWriter(body)
-		mwriter, err := mpw.CreateFormFile("file", "file.aci")
-		if err != nil {
-			log.Fatalf("Unable to encode aci to file for upload: %v", err)
-		}
-		if _, err := io.Copy(mwriter, bytes.NewBuffer(aci)); err != nil {
-			log.Fatalf("Unable to encode aci to file for upload: %v", err)
-		}
-		labels["signature"] = string(signatureBuf.Bytes())
-		for _, key := range []string{"name", "version", "os", "arch", "signature"} {
-			w, err := mpw.CreateFormField(key)
+		for name, data := range map[string][]byte{"aci": aci, "asc": []byte(labels["sig"])} {
+			mwriter, err := mpw.CreateFormFile(name, name)
 			if err != nil {
-				log.Fatalf("Failed to write form field %q: %v", key, err)
+				log.Fatalf("Unable to encode %s to file for upload: %v", name, err)
 			}
-			if _, err := io.Copy(w, bytes.NewBuffer([]byte(labels[key]))); err != nil {
-				log.Fatalf("Failed to write form field %q: %v", key, err)
+			if _, err := io.Copy(mwriter, bytes.NewBuffer(data)); err != nil {
+				log.Fatalf("Unable to encode %s to file for upload: %v", name, err)
 			}
 		}
+
 		boundary = mpw.Boundary()
 		if err := mpw.Close(); err != nil {
 			log.Fatalf("Error closing multipart writer: %v", err)
 		}
 	}
-
-	req, _ := http.NewRequest("POST", fmt.Sprintf("%s", target), body)
+	// s := `/{name:[^$]+}$/{version}/{os}/{arch}.{ext}`
+	req, _ := http.NewRequest("POST", fmt.Sprintf("%s/%s$/%s/%s/%s.", *server, labels["name"], labels["version"], labels["os"], labels["arch"]), body)
+	log.Printf("req: %s\n", req.URL)
 	req.Header.Set("Content-Type", fmt.Sprintf("multipart/form-data; boundary=%s", boundary))
-	resp, err = http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Fatalf("Failed to upload aci: %v", err)
 	}
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalf("Failed to read response: %v", err)
+	}
+	log.Printf("Resp:\n%s\n", data)
 }
 
 func loadAndValidateACI(path, server string) (data []byte, labels map[string]string, err error) {
@@ -143,9 +136,9 @@ func loadAndValidateACI(path, server string) (data []byte, labels map[string]str
 	if labels["version"] == "" {
 		return nil, nil, fmt.Errorf("Unspecified version is not supported.")
 	}
-	if !strings.HasPrefix(im.Name.String(), server+"/") && server != testServer {
-		return nil, nil, fmt.Errorf("Image name is %q which is not part of the server %q.", im.Name, server)
-	}
+	// if !strings.HasPrefix(im.Name.String(), server+"/") && server != testServer {
+	// 	return nil, nil, fmt.Errorf("Image name is %q which is not part of the server %q.", im.Name, server)
+	// }
 	labels["name"] = im.Name.String()
 	data, err = ioutil.ReadFile(path)
 	if err != nil {
