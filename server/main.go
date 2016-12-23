@@ -26,15 +26,13 @@ func main() {
 
 	go func() {
 		for {
-			time.Sleep(time.Second * 5)
-			resp, err := http.Get("http://www.google.com")
+			time.Sleep(time.Second * 25)
+			_, err := http.Get("http://www.google.com")
 			if err != nil {
 				log.Printf("failed to find google: %v", err)
 				continue
 			}
 			log.Printf("found google, got response")
-			data, _ := ioutil.ReadAll(resp.Body)
-			log.Printf("resp: %s\n", data)
 		}
 	}()
 
