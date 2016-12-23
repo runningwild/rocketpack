@@ -68,16 +68,57 @@ func main() {
 
 		// Check if it exists
 		var data []byte
+		bestMatch := ""
+		var highestVersion *semver.Version
 		if err := db.View(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte(vars.name))
 			if b == nil {
 				return fmt.Errorf("bucket %q not found", vars.name)
 			}
 			b.ForEach(func(k, v []byte) error {
-				fmt.Printf("%s: %d\n", k, len(v))
+				vx, err := keyToVars(string(k))
+				if err != nil {
+					log.Printf("invalid key %q in %q", k, vars.name)
+					return nil
+				}
+				if vx.name != vars.name {
+					log.Printf("unexpected vars %v in %s", vx, vars.name)
+					return nil
+				}
+
+				if vars.os != "" && vars.os != vx.os {
+					return nil
+				}
+				if vars.arch != "" && vars.arch != vx.arch {
+					return nil
+				}
+				if vars.version != "" && vars.version != vx.version {
+					return nil
+				}
+				if vx.ext != vars.ext {
+					return nil
+				}
+
+				// Now if the version was not specified,
+				if vars.version == "" {
+					vxSemver, err := semver.NewVersion(vx.version)
+					if err != nil {
+						log.Printf("container %q %q has invalid version number %q", vars.name, k, vx.version)
+						return nil
+					}
+					if highestVersion == nil || highestVersion.LessThan(*vxSemver) {
+						highestVersion = vxSemver
+					} else {
+						return nil
+					}
+				}
+				bestMatch = string(k)
 				return nil
 			})
-			data = b.Get(varsToKey(vars))
+			if bestMatch == "" {
+				return fmt.Errorf("not found")
+			}
+			data = b.Get([]byte(bestMatch))
 			if data == nil {
 				return fmt.Errorf("not found")
 			}
@@ -87,6 +128,7 @@ func main() {
 			http.Error(w, "failed to get container", http.StatusInternalServerError)
 			return
 		}
+
 		if _, err := w.Write(data); err != nil {
 			log.Printf("failed to write data %v: %v", vars, err)
 		}
@@ -197,8 +239,12 @@ func validateACIVars(vars map[string]string, extension bool) (*aciVars, error) {
 		return nil, fmt.Errorf("invalid ACIdentifier %q, must match the regexp %q", vars["name"], types.ValidACIdentifier)
 	}
 
-	if _, err := semver.NewVersion(vars["version"]); err != nil {
-		return nil, fmt.Errorf("invalid version %q, must be a valid semver string", vars["version"])
+	if _, err := semver.NewVersion(vars["version"]); vars["version"] != "" && err != nil {
+		return nil, fmt.Errorf("invalid version %q, must be a valid semver string or the empty string", vars["version"])
+	}
+
+	if vars["os"] != "" && vars["arch"] == "" {
+		return nil, fmt.Errorf("os cannot be specified without specifying arch")
 	}
 
 	if extension && (vars["ext"] != ".aci" && vars["ext"] != ".aci.asc") {
