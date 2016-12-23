@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"strings"
@@ -27,14 +26,12 @@ func main() {
 	go func() {
 		for {
 			time.Sleep(time.Second * 5)
-			resp, err := http.Get("http://www.google.com")
+			_, err := http.Get("http://www.google.com")
 			if err != nil {
 				log.Printf("failed to find google: %v", err)
 				continue
 			}
 			log.Printf("found google, got response")
-			data, _ := ioutil.ReadAll(resp.Body)
-			log.Printf("resp: %s\n", data)
 		}
 	}()
 
@@ -48,7 +45,7 @@ func main() {
 		w.Write([]byte("OK"))
 	})
 
-	r.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+	r.PathPrefix("").HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		data, _ := json.MarshalIndent(req, "", "  ")
 		fmt.Printf("%s\n", data)
 	})
