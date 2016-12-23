@@ -16,11 +16,9 @@ import (
 )
 
 var (
-	domain      = flag.String("domain", "", "Domain to serve containers from.")
-	dbPath      = flag.String("db", "db", "Database to use for persistent storage.")
-	port        = flag.Int("port", 443, "Port to serve https traffic on.")
-	tlsCertFile = flag.String("cert-file", "", "PEM encoded certificates.")
-	tlsKeyFile  = flag.String("key-file", "", "PEM encoded key.")
+	domain = flag.String("domain", "", "Domain to serve containers from.")
+	dbPath = flag.String("db", "db", "Database to use for persistent storage.")
+	port   = flag.Int("port", 8080, "Port to serve traffic on.")
 )
 
 func main() {
@@ -47,14 +45,6 @@ func main() {
 	defer db.Close()
 
 	r := mux.NewRouter()
-
-	// Health-Check code so GCE will route requests to us.
-	r.MatcherFunc(func(r *http.Request, rm *mux.RouteMatch) bool {
-		agent := r.Header["User-Agent"]
-		return len(agent) == 1 && strings.HasPrefix(agent[0], "GoogleHC/")
-	}).HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		w.Write([]byte("OK"))
-	})
 
 	sr := r.Path(fetchPattern).Subrouter()
 	sr.Methods("GET").HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -218,7 +208,7 @@ func main() {
 		fmt.Fprintf(w, "balls")
 	})
 
-	log.Fatalf("%v", http.ListenAndServeTLS(fmt.Sprintf(":%d", *port), *tlsCertFile, *tlsKeyFile, r))
+	log.Fatalf("%v", http.ListenAndServe(fmt.Sprintf(":%d", *port), r))
 }
 
 func varsToKey(vars *aciVars) []byte {
