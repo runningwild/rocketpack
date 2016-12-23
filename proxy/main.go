@@ -92,7 +92,6 @@ func reqToStr(req *http.Request) string {
 		RemoteAddr:       req.RemoteAddr,
 		RequestURI:       req.RequestURI,
 		TLS:              req.TLS,
-		Response:         req.Response,
 	}, "", "  ")
 	return string(data)
 }
@@ -116,5 +115,4 @@ type Request struct {
 	RemoteAddr       string
 	RequestURI       string
 	TLS              *tls.ConnectionState
-	Response         *http.Response
 }
