@@ -19,7 +19,7 @@ import (
 var (
 	domain      = flag.String("domain", "", "Domain to serve containers from.")
 	port        = flag.Int("port", 443, "Port to serve https traffic on.")
-	dst         = flag.String("dst", "http://localhost:8081", "Address to forward traffic to.")
+	dst         = flag.String("dst", "localhost:8080", "Address to forward traffic to.")
 	tlsCertFile = flag.String("cert-file", "", "PEM encoded certificates.")
 	tlsKeyFile  = flag.String("key-file", "", "PEM encoded key.")
 )
@@ -50,13 +50,14 @@ func main() {
 	})
 
 	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		fmt.Printf("Req: %s\n", reqToStr(req))
 		if *dst == "" {
 			return
 		}
 		req.Host = ""
 		req.RequestURI = ""
+		req.URL.Scheme = "http"
 		req.URL.Host = *dst
+		fmt.Printf("Req: %s\n", reqToStr(req))
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			fmt.Printf("Failed proxy request: %v\n", err)
@@ -65,6 +66,7 @@ func main() {
 		io.Copy(w, resp.Body)
 	})
 
+	// log.Fatalf("%v", http.ListenAndServe(fmt.Sprintf(":%d", *port), r))
 	log.Fatalf("%v", http.ListenAndServeTLS(fmt.Sprintf(":%d", *port), *tlsCertFile, *tlsKeyFile, r))
 }
 
