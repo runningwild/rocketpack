@@ -49,10 +49,6 @@ func main() {
 		w.Write([]byte("OK"))
 	})
 
-	dstUrl, err := url.Parse(*dst)
-	if err != nil {
-		log.Fatalf("Failed to parse %q as a valid URL: %v", *dst, err)
-	}
 	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		fmt.Printf("Req: %s\n", reqToStr(req))
 		if *dst == "" {
@@ -60,7 +56,7 @@ func main() {
 		}
 		req.Host = ""
 		req.RequestURI = ""
-		req.URL = dstUrl
+		req.URL.Host = *dst
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			fmt.Printf("Failed proxy request: %v\n", err)
