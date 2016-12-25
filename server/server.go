@@ -65,7 +65,7 @@ func (s *impl) Get(id ID, ext string) ([]byte, error) {
 }
 
 func (s *impl) Put(id ID, data, sig []byte) error {
-	if err := id.validate(); err != nil {
+	if err := id.Validate(); err != nil {
 		return fmt.Errorf("invalid id: %v", err)
 	}
 	if err := s.db.Batch(func(tx *bolt.Tx) error {

@@ -42,7 +42,7 @@ func stringToID(s string) (id ID, ext string, err error) {
 		Os:      parts[2],
 		Arch:    parts[3],
 	}
-	if idErr := _id.validate(); idErr != nil {
+	if idErr := _id.Validate(); idErr != nil {
 		err = fmt.Errorf("invalid id string: %v", err)
 		return
 	}
@@ -50,7 +50,7 @@ func stringToID(s string) (id ID, ext string, err error) {
 	return
 }
 
-func (id ID) validate() error {
+func (id ID) Validate() error {
 	if _, err := types.NewACIdentifier(id.Name); err != nil {
 		return fmt.Errorf("invalid ACIdentifier %q, must match the regexp %q", id.Name, types.ValidACIdentifier)
 	}
