@@ -8,42 +8,36 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"time"
 
 	"bytes"
 
-	"github.com/boltdb/bolt"
 	"github.com/gorilla/mux"
 	"github.com/runningwild/rocketpack/server"
+	"golang.org/x/net/context"
 )
 
 var (
-	domain = flag.String("domain", "", "Domain to serve containers from.")
-	dbPath = flag.String("db", "db", "Database to use for persistent storage.")
+	domain = flag.String("domain", "rocketpack.io", "Domain to serve containers from.")
 	port   = flag.Int("port", 8080, "Port to serve traffic on.")
 )
 
 func main() {
 	flag.Parse()
-	db, err := bolt.Open(*dbPath, 0664, nil)
-	if err != nil {
-		log.Fatalf("failed to open bolt db: %v", err)
-	}
-	s := server.Make(db)
-	defer db.Close()
 
-	// TODO: Get rid of this once we've figured out how to isolate this stupid thing.
-	go func() {
-		for {
-			time.Sleep(time.Second * 25)
-			_, err := http.Get("http://www.google.com")
-			if err != nil {
-				log.Printf("failed to find google: %v", err)
-				continue
-			}
-			log.Printf("found google, got response")
-		}
-	}()
+	s, err := server.MakeCloudStorageServer(context.Background(), "montage-generator", "images-monkey-ball")
+	if err != nil {
+		log.Fatalf("failed to create storage: %v", err)
+	}
+
+	ids, err := s.List(context.Background(), "")
+	if err != nil {
+		log.Fatalf("unable to list: %v", err)
+	}
+	fmt.Printf("Listing...\n")
+	for _, id := range ids {
+		fmt.Printf("%v\n", id)
+	}
+	fmt.Printf("Done listing...\n")
 
 	r := mux.NewRouter()
 
@@ -59,12 +53,12 @@ func main() {
 
 		ext := vars["ext"]
 		if ext != ".aci" && ext != ".aci.asc" {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, "invalid extension", http.StatusBadRequest)
 			return
 		}
 
 		log.Printf("ID: %v\n", id)
-		data, err := s.Get(id, ext)
+		data, err := s.Get(req.Context(), id, ext)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -112,7 +106,7 @@ func main() {
 			return
 		}
 
-		if err := s.Put(id, aciData, ascData); err != nil {
+		if err := s.Put(req.Context(), id, aciData, ascData); err != nil {
 			log.Printf("failed to put: %v", err)
 			http.Error(w, "failed put", http.StatusInternalServerError)
 			return

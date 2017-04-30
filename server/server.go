@@ -1,131 +1,103 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
-	"log"
-	"sort"
+	"io"
+	"io/ioutil"
 
-	"github.com/boltdb/bolt"
+	// Imports the Google Cloud Storage client package.
+	"cloud.google.com/go/storage"
+	"golang.org/x/net/context"
 )
 
 type Server interface {
-	Get(id ID, ext string) ([]byte, error)
-	Put(id ID, data, sig []byte) error
-	List(name string) ([]ID, error)
-	Delete(id ID) error
+	Get(ctx context.Context, id ID, ext string) ([]byte, error)
+	Put(ctx context.Context, id ID, data, sig []byte) error
+	List(ctx context.Context, name string) ([]ID, error)
+	Delete(ctx context.Context, id ID) error
 }
 
-type impl struct {
-	db *bolt.DB
-}
-
-func Make(db *bolt.DB) Server {
-	return &impl{db: db}
-}
-
-func (s *impl) Get(id ID, ext string) ([]byte, error) {
-	ids, err := s.List(id.Name)
+func MakeCloudStorageServer(ctx context.Context, projectID, bucketName string) (Server, error) {
+	client, err := storage.NewClient(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to make client: %v", err)
 	}
-	n := 0
-	for i := range ids {
-		if ids[i].Version != id.Version && id.Version != "latest" {
-			continue
+
+	if attrs, err := client.Bucket(bucketName).Attrs(ctx); err == storage.ErrBucketNotExist {
+		fmt.Printf("%v %v\n", attrs, err)
+		fmt.Printf("creating bucket %s\n", bucketName)
+		if err := client.Bucket(bucketName).Create(ctx, projectID, nil); err != nil {
+			return nil, fmt.Errorf("failed to create bucket: %v", err)
 		}
-		if ids[i].Os != "" && ids[i].Os != id.Os {
-			continue
-		}
-		if ids[i].Arch != "" && ids[i].Arch != id.Arch {
-			continue
-		}
-		ids[n] = ids[i]
-		n++
+	} else {
+		fmt.Printf("%v %v\n", attrs, err)
+		fmt.Printf("bucket attrs: %v\n", attrs)
 	}
-	ids = ids[0:n]
-	if len(ids) == 0 {
-		return nil, fmt.Errorf("no matching containers found")
+	return &cloudServer{
+		client: client,
+		bucket: client.Bucket(bucketName),
+	}, nil
+}
+
+type cloudServer struct {
+	client *storage.Client
+	bucket *storage.BucketHandle
+}
+
+func (s *cloudServer) Get(ctx context.Context, id ID, ext string) ([]byte, error) {
+	if err := id.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid id: %v", err)
 	}
-	var data []byte
-	if err := s.db.Batch(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(ids[0].Name))
-		if bucket == nil {
-			log.Printf("Expected bucket for name %q", ids[0].Name)
-			return fmt.Errorf("no matching containers found")
-		}
-		data = bucket.Get([]byte(idToString(ids[0], ext)))
-		if data == nil {
-			return fmt.Errorf("no matching containers found")
-		}
-		return nil
-	}); err != nil {
-		return nil, err
+
+	obj, err := s.bucket.Object(id.String() + ext).NewReader(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get object reader: %v", err)
+	}
+	defer obj.Close()
+	data, err := ioutil.ReadAll(obj)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read object: %v", err)
 	}
 	return data, nil
 }
-
-func (s *impl) Put(id ID, data, sig []byte) error {
+func (s *cloudServer) Put(ctx context.Context, id ID, data, sig []byte) error {
 	if err := id.Validate(); err != nil {
 		return fmt.Errorf("invalid id: %v", err)
 	}
-	if err := s.db.Batch(func(tx *bolt.Tx) error {
-		bucket, err := tx.CreateBucketIfNotExists([]byte(id.Name))
-		if err != nil {
-			return err
-		}
-		log.Printf("Putting into bucket %s", id.Name)
-		aciKey := idToString(id, ".aci")
-		ascKey := idToString(id, ".aci.asc")
-		if err := bucket.Put([]byte(aciKey), data); err != nil {
-			return fmt.Errorf("failed to put data: %v", err)
-		}
-		if err := bucket.Put([]byte(ascKey), sig); err != nil {
-			return fmt.Errorf("failed to put signature: %v", err)
-		}
 
-		// TODO: verify the signature
-
-		return nil
-	}); err != nil {
-		return err
+	for key, val := range map[string][]byte{id.String() + ".aci": data, id.String() + ".aci.asc": sig} {
+		obj := s.bucket.Object(key).NewWriter(ctx)
+		defer obj.Close()
+		if _, err := io.Copy(obj, bytes.NewBuffer(val)); err != nil {
+			return fmt.Errorf("failed to write object: %v", err)
+		}
 	}
 	return nil
 }
-
-func (s *impl) List(name string) ([]ID, error) {
-	if len(name) == 0 {
-		return nil, fmt.Errorf("invalid name")
+func (s *cloudServer) List(ctx context.Context, name string) ([]ID, error) {
+	it := s.bucket.Objects(ctx, &storage.Query{})
+	idsmaps := make(map[ID]bool)
+	for obj, err := it.Next(); err == nil; obj, err = it.Next() {
+		id, _, err := stringToID(obj.Name)
+		if err != nil {
+			continue
+		}
+		idsmaps[id] = true
 	}
 	var ids []ID
-	if err := s.db.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(name))
-		if bucket == nil {
-			return fmt.Errorf("no containers found under the name %q", name)
-		}
-		log.Printf("Looking into bucket %s", name)
-		if err := bucket.ForEach(func(k, _ []byte) error {
-			id, ext, err := stringToID(string(k))
-			if ext == ".aci.asc" {
-				return nil
-			}
-			log.Printf("Id is %v", id)
-			if err != nil {
-				log.Printf("error on container id %s: %v", k, err)
-				return nil
-			}
-			ids = append(ids, id)
-			return nil
-		}); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		return nil, err
+	for id := range idsmaps {
+		ids = append(ids, id)
 	}
-	sort.Sort(idSlice(ids))
 	return ids, nil
 }
+func (s *cloudServer) Delete(ctx context.Context, id ID) error {
+	if err := id.Validate(); err != nil {
+		return fmt.Errorf("invalid id: %v", err)
+	}
 
-func (s *impl) Delete(id ID) error {
+	if err := s.bucket.Object(id.Name).Delete(ctx); err != nil {
+		return fmt.Errorf("failed to delete object: %v", err)
+	}
 	return nil
 }

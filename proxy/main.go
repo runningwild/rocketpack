@@ -17,7 +17,6 @@ import (
 )
 
 var (
-	domain      = flag.String("domain", "", "Domain to serve containers from.")
 	port        = flag.Int("port", 443, "Port to serve https traffic on.")
 	dst         = flag.String("dst", "localhost:8080", "Address to forward traffic to.")
 	tlsCertFile = flag.String("cert-file", "", "PEM encoded certificates.")
