@@ -22,6 +22,7 @@ var (
 )
 
 func main() {
+	log.SetFlags(log.Lshortfile | log.Ltime | log.Ldate)
 	flag.Parse()
 
 	s, err := server.MakeCloudStorageServer(context.Background(), "montage-generator", "rocketpack-images")
@@ -33,11 +34,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("unable to list: %v", err)
 	}
-	fmt.Printf("Listing...\n")
+	log.Printf("Listing...\n")
 	for _, id := range ids {
-		fmt.Printf("%v\n", id)
+		log.Printf("%v\n", id)
 	}
-	fmt.Printf("Done listing...\n")
+	log.Printf("Done listing...\n")
 
 	r := mux.NewRouter()
 

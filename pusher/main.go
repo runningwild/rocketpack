@@ -21,9 +21,10 @@ import (
 const testServer = "http://localhost:8080"
 
 var (
-	server  = flag.String("server", "rocketpack.io", "server to push to.")
-	aciPath = flag.String("aci", "", "aci to upload.")
-	ascPath = flag.String("asc", "", "asc to upload, defaults to aci path + '.asc'.")
+	protocol = flag.String("protocol", "https", "http or https")
+	server   = flag.String("server", "rocketpack.io", "server to push to.")
+	aciPath  = flag.String("aci", "", "aci to upload.")
+	ascPath  = flag.String("asc", "", "asc to upload, defaults to aci path + '.asc'.")
 )
 
 func main() {
@@ -75,7 +76,7 @@ func main() {
 		}
 	}
 	// s := `/{name:[^$]+}$/{version}/{os}/{arch}.{ext}`
-	req, _ := http.NewRequest("POST", fmt.Sprintf("%s/%s$/%s/%s/%s.", *server, labels["name"], labels["version"], labels["os"], labels["arch"]), body)
+	req, _ := http.NewRequest("POST", fmt.Sprintf("%s://%s/%s$/%s/%s/%s.", *protocol, *server, labels["name"], labels["version"], labels["os"], labels["arch"]), body)
 	log.Printf("req: %s\n", req.URL)
 	req.Header.Set("Content-Type", fmt.Sprintf("multipart/form-data; boundary=%s", boundary))
 	resp, err := http.DefaultClient.Do(req)
