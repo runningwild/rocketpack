@@ -24,7 +24,7 @@ var (
 func main() {
 	flag.Parse()
 
-	s, err := server.MakeCloudStorageServer(context.Background(), "montage-generator", "images-monkey-ball")
+	s, err := server.MakeCloudStorageServer(context.Background(), "montage-generator", "rocketpack-images")
 	if err != nil {
 		log.Fatalf("failed to create storage: %v", err)
 	}
